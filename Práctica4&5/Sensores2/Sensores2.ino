@@ -9,12 +9,12 @@
 #include <UniversalTelegramBot.h>   
 #include <ArduinoJson.h>
 
-const char* ssid = "ARRIS-FC92";
-const char* password = "2EFC9145F2429281";
-//const char* ssid = "Kassandra";
-//const char* password = "12345678";
+//const char* ssid = "ARRIS-FC92";
+//const char* password = "2EFC9145F2429281";
+const char* ssid = "Kassandra";
+const char* password = "12345678";
 
-#define BOTtoken "6462574155:AAFY7yrdXGU2MtLYX3asiS2KDy7IK7fbBdQ"  
+#define BOTtoken "5838117904:AAFEjQ6jywGMqoeYnQmTp0Bik99LZabojg4"  
 #define CHAT_ID "6079647597"
 
 #ifdef ESP8266
@@ -36,9 +36,11 @@ static void Tarea2( void * parameter);
 static void Tarea3( void * parameter);
 
 //Variables para los turnos de las tareas
-bool tarea1, tarea2, tarea3 = false;
-int turno = 1;
-bool cancelar = false;
+volatile bool tarea[3] = {false,false,false};
+int turno = 0;
+
+bool valorI = LOW;
+bool valorS = LOW;
 
 //Pines para los sensores
 int PinSonido = 4;
@@ -46,67 +48,52 @@ int LEDS = 19;
 int PinInfrarrojo = 5;
 int LEDI = 18;
 //Mensaje de la uart
-char mensaje=' ';
+String mensaje;
 int LEDU = 21;
 
 
 //Tarea del sensor infrarrojo
 static void Tarea1( void * parameter) {
-  while(!cancelar){
-    tarea1 = true;
-    while(tarea2 && tarea3 && !cancelar){
-      if (turno==1){
-        tarea1=false;
-          while (turno==1 && !cancelar){
-            /*espera*/
-          }
-          tarea1=true;
-      }
+  while(1){
+    //Solicita entrar a la sección crítica
+    tarea[0] = true;
+    turno = 0;
+    while (tarea[1] || tarea[2] || (turno != 0)){
+      //Espera a que sea su turno
+      vTaskDelay(250);
     }
-    if (cancelar) break;
     //Ejecuta la sección crítica
-    turno=1;
-    tarea2=false;
-    tarea3=false;
+    tarea[0]=false;
+    vTaskDelay(1000 / portTICK_PERIOD_MS); //wait for a second
   }
 }
 //Tarea del sensor de sonido
 static void Tarea2( void * parameter) {
-  while(!cancelar){
-    tarea2 = true;
-    while(tarea1 && tarea3 && !cancelar){
-      if (turno==2){
-        tarea2=false;
-          while (turno==2 && !cancelar){
-            /*espera*/
-          }
-          tarea2=true;
-      }
+  while(1){
+    //Solicita entrar a la sección crítica
+    tarea[1] = true;
+    turno = 1;
+    while (tarea[0] || tarea[2] || (turno != 1)){
+      //Espera a que sea su turno
+      vTaskDelay(250);
     }
-    if (cancelar) break;
     //Ejecuta la sección crítica
-    turno=2;
-    tarea1=false;
-    tarea3=false;
+    tarea[1]=false;
+    vTaskDelay(1000 / portTICK_PERIOD_MS); //wait for a second
   }
 }
 static void Tarea3( void * parameter) {
-  while(!cancelar){
-    tarea3 = true;
-    while(tarea2 && tarea3 && !cancelar){
-      if (turno==3){
-        tarea3=false;
-          while (turno==3 && !cancelar){
-            /*espera*/
-          }
-          tarea3=true;
-      }
+  while(1){
+    //Solicita entrar a la sección crítica
+    tarea[2] = true;
+    turno = 2;
+    while (tarea[0] || tarea[1] || (turno != 2)){
+      //Espera a que sea su turno
+      vTaskDelay(250);
     }
-    if (cancelar) break;
     //Ejecuta la sección crítica
-    turno=3;
-    tarea1=false;
-    tarea2=false;
+    tarea[2]=false;
+    vTaskDelay(1000 / portTICK_PERIOD_MS); //wait for a second
   }
 }
 
@@ -139,50 +126,54 @@ void handleNewMessages(int numNewMessages) {
 
     if (text == "/led_Infrarrojo") {
       bot.sendMessage(chat_id, "Turno del sensor Infrarrojo", "");
-    int valorI = digitalRead(PinInfrarrojo);
+    valorI = digitalRead(PinInfrarrojo);
     digitalWrite(LEDI, valorI);
+    delay(2000);
+    digitalWrite(LEDI, LOW);
     }
     
     if (text == "/led_Sonido") {
       bot.sendMessage(chat_id, "Turno del sensor de Sonido", "");
-    int valorS = digitalRead(PinSonido);
+    valorS = digitalRead(PinSonido);
     digitalWrite(LEDS, valorS);
+    delay(2000);
+    digitalWrite(LEDS, LOW);
     }
     
     if (text == "/led_UART") {
       bot.sendMessage(chat_id, "Turno de la tarea en la UART", "");
-      bot.sendMessage(chat_id, "Presione 'a' para encender el led y 'b' para apagarlo", "");
-      if (Serial.available() !=0){
-        mensaje=Serial.read();
-        if(mensaje=='a'){
-         digitalWrite(LEDU, HIGH);
-         bot.sendMessage(chat_id, "Se introdujo la letra a", "");
-       }
-        else if (mensaje=='b'){
-          digitalWrite(LEDU, LOW);
-          bot.sendMessage(chat_id, "Se introdujo la letra b", "");
-        }
-    }
+      bot.sendMessage(chat_id, "Introduzca la letra A para encender el led", "");
+      if (Serial.available() > 0){
+        char mensaje = Serial.read();
+         if (mensaje == 'A') digitalWrite(LEDU, HIGH);
+         delay(2000);
+         digitalWrite(LEDU, LOW);
+      }
     }
   }
 }
 
 void setup() {
-  pinMode(LEDI, OUTPUT);
-  pinMode(LEDS, OUTPUT);
-  pinMode(LEDU, OUTPUT);
-  pinMode(PinInfrarrojo, INPUT);
-  pinMode(PinSonido, INPUT);
   Serial.begin(115200);
-  vTaskDelay(1000 / portTICK_PERIOD_MS); //wait for a second
-  xTaskCreatePinnedToCore(Tarea1,"Tarea01",2048,NULL,1,&Task1,NULL);
-  xTaskCreatePinnedToCore(Tarea2,"Tarea02",2048,NULL,1,&Task2,NULL);
-  xTaskCreatePinnedToCore(Tarea3,"Tarea03",2048,NULL,1,&Task3,NULL);
 
   #ifdef ESP8266
     configTime(0, 0, "pool.ntp.org");      
     client.setTrustAnchors(&cert); 
   #endif
+
+  pinMode(LEDI, OUTPUT);
+  pinMode(LEDS, OUTPUT);
+  pinMode(LEDU, OUTPUT);
+  pinMode(PinInfrarrojo, INPUT);
+  pinMode(PinSonido, INPUT);
+  digitalWrite(LEDI, valorI);
+  digitalWrite(LEDS, valorS);
+  digitalWrite(LEDU, LOW);
+
+  vTaskDelay(1000 / portTICK_PERIOD_MS); //wait for a second
+  xTaskCreatePinnedToCore(Tarea1,"Tarea01",2048,NULL,1,&Task1,NULL);
+  xTaskCreatePinnedToCore(Tarea2,"Tarea02",2048,NULL,1,&Task2,NULL);
+  xTaskCreatePinnedToCore(Tarea3,"Tarea03",2048,NULL,1,&Task3,NULL);
   
   // Connect to Wi-Fi
   WiFi.mode(WIFI_STA);
